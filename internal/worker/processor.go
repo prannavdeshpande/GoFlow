@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yourusername/emailworker/internal/db"
 	"github.com/yourusername/emailworker/internal/tasks"
+	"github.com/yourusername/emailworker/internal/webhook"
 )
 
 const defaultWorkerCount = 5
@@ -156,6 +157,7 @@ func (p *Processor) handleEmailBatch(ctx context.Context, task *asynq.Task) erro
 	}
 
 	anyFailed := false
+	failedCount := 0
 	for _, recipient := range recipients {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -165,6 +167,7 @@ func (p *Processor) handleEmailBatch(ctx context.Context, task *asynq.Task) erro
 		}
 		if err := p.processRecipient(ctx, job.ID, recipient); err != nil {
 			anyFailed = true
+			failedCount++
 			log.Printf("WARN  recipient %s failed: %v", recipient.Email, err)
 		}
 	}
@@ -178,6 +181,19 @@ func (p *Processor) handleEmailBatch(ctx context.Context, task *asynq.Task) erro
 	}
 	if _, err := db.UpdateJobStatus(ctx, p.db, job.ID, status, errorMsg); err != nil {
 		return err
+	}
+
+	if job.WebhookURL != "" {
+		payload := webhook.WebhookPayload{
+			JobID:           job.ID,
+			Status:          status,
+			TotalRecipients: len(recipients),
+			FailedCount:     failedCount,
+			CompletedAt:     time.Now(),
+		}
+		if err := webhook.Send(ctx, job.WebhookURL, payload); err != nil {
+			log.Printf("WARN  webhook send failed: %v", err)
+		}
 	}
 
 	return nil
