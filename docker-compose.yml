@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine          # Lightweight Alpine-based image
+    container_name: emailworker_pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: emailworker
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: emailworker
+    ports:
+      - "5432:5432"                    # host:container — lets you connect from your PC
+    volumes:
+      - pg_data:/var/lib/postgresql/data  # persist DB between restarts
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: emailworker_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  pg_data:
+  redis_data:
